@@ -1,0 +1,483 @@
+<project_specification>
+  <project_name>Mac-Traker</project_name>
+
+  <overview>
+    Sistema di Network Intelligence per il tracking dei MAC address in ambienti enterprise.
+    Analizza 1200+ dispositivi di rete (99% Huawei, 1% Cisco, AP Extreme) per localizzare
+    con certezza al 100% l'endpoint fisico di ogni MAC address, tracciare movimenti storici,
+    mappare la topologia di rete e generare alert in tempo reale.
+  </overview>
+
+  <technology_stack>
+    <frontend>
+      <framework>React 18+</framework>
+      <styling>TailwindCSS</styling>
+      <charts>Recharts</charts>
+      <topology_map>vis.js o D3.js</topology_map>
+      <language>TypeScript</language>
+      <build_tool>Vite</build_tool>
+    </frontend>
+    <backend>
+      <runtime>Python 3.11+</runtime>
+      <framework>FastAPI</framework>
+      <database>PostgreSQL</database>
+      <orm>SQLAlchemy 2.0</orm>
+      <snmp_library>pysnmp</snmp_library>
+      <ssh_library>netmiko</ssh_library>
+      <scheduler>APScheduler</scheduler>
+      <telegram>python-telegram-bot</telegram>
+    </backend>
+    <communication>
+      <api>REST API</api>
+      <format>JSON</format>
+    </communication>
+  </technology_stack>
+
+  <prerequisites>
+    <environment_setup>
+      - Python 3.11+ con pip/poetry
+      - Node.js 18+ con npm
+      - PostgreSQL 14+
+      - Accesso SNMP ai dispositivi di rete
+      - Credenziali SSH per CLI fallback
+      - Bot Telegram configurato per alert
+    </environment_setup>
+  </prerequisites>
+
+  <feature_count>120</feature_count>
+
+  <security_and_access_control>
+    <user_roles>
+      <role name="user">
+        <permissions>
+          - Accesso completo a tutte le funzionalita
+          - Nessuna autenticazione richiesta (single user)
+        </permissions>
+        <protected_routes>
+          - Nessuna protezione (uso personale)
+        </protected_routes>
+      </role>
+    </user_roles>
+    <authentication>
+      <method>none</method>
+      <session_timeout>none</session_timeout>
+    </authentication>
+    <sensitive_operations>
+      - Credenziali switch criptate nel database
+      - SNMP community string protetta
+      - Token Telegram in variabili ambiente
+    </sensitive_operations>
+  </security_and_access_control>
+
+  <core_features>
+    <ricerca_mac>
+      - Ricerca per MAC completo (AA:BB:CC:DD:EE:FF)
+      - Ricerca per MAC parziale (ultimi 4-6 caratteri)
+      - Ricerca per indirizzo IP associato
+      - Ricerca per hostname/nome dispositivo
+      - Risultati mostrano: switch, porta, VLAN, IP, vendor, tipo dispositivo
+      - Visualizzazione primo/ultimo avvistamento
+      - Tempo di risposta inferiore a 2 secondi
+      - Certezza 100% endpoint fisico (non uplink)
+    </ricerca_mac>
+
+    <storico_movimenti>
+      - Timeline cronologica movimenti MAC
+      - Retention dati 90 giorni
+      - Filtri per periodo temporale
+      - Visualizzazione cambio porta/switch
+      - Export storico in CSV
+      - Pulizia automatica dati oltre 90gg
+    </storico_movimenti>
+
+    <discovery_rete>
+      - Discovery SNMP primario (MAC table via Bridge MIB)
+      - Fallback CLI via SSH per dispositivi problematici
+      - Scheduling ogni 15-30 minuti configurabile
+      - Discovery automatico da seed device via LLDP
+      - Supporto 1200+ dispositivi
+      - Gestione credenziali SNMP (community unica)
+      - Gestione credenziali SSH per gruppi
+      - Rilevamento uplink vs porte endpoint
+      - Parsing MAC table Huawei CloudEngine
+      - Parsing MAC table Cisco
+      - Parsing MAC table Extreme AP
+    </discovery_rete>
+
+    <gestione_switch>
+      - CRUD dispositivi di rete
+      - Import automatico via LLDP discovery
+      - Raggruppamento switch per credenziali SSH
+      - Monitoraggio stato connessione (up/down)
+      - Visualizzazione porte e stato
+      - Statistiche per switch (MAC count, porte attive)
+    </gestione_switch>
+
+    <alerting>
+      - Alert nuovo MAC (mai visto prima)
+      - Alert MAC cambia porta (movimento)
+      - Alert MAC scompare (non visto da X ore)
+      - Alert porta con troppi MAC (possibile uplink non mappato)
+      - Visualizzazione alert in dashboard
+      - Notifiche Telegram real-time
+      - Configurazione soglie alert
+      - Storico alert con filtri
+    </alerting>
+
+    <topology_mapping>
+      - Mappa grafica interattiva della rete
+      - Discovery relazioni via LLDP/CDP
+      - Visualizzazione connessioni switch-to-switch
+      - Click su switch per vedere MAC connessi
+      - Zoom e pan sulla mappa
+      - Highlight percorso MAC (core -> distribution -> access)
+      - Aggiornamento automatico topologia
+    </topology_mapping>
+
+    <endpoint_intelligence>
+      - Database OUI locale (IEEE)
+      - Aggiornamento periodico database OUI
+      - Fallback API online (macvendors.com)
+      - Identificazione vendor automatica
+      - Classificazione tipo dispositivo da vendor
+      - Cache risultati lookup
+    </endpoint_intelligence>
+
+    <dashboard>
+      - Totale MAC attivi in rete
+      - MAC per switch (top 10)
+      - MAC per VLAN
+      - Grafico trend MAC nel tempo
+      - Alert attivi count
+      - Ultimo discovery timestamp
+      - Stato salute discovery (errori)
+      - Quick search MAC dalla dashboard
+    </dashboard>
+
+    <export_backup>
+      - Export risultati ricerca in CSV
+      - Export lista MAC completa
+      - Backup automatico database (schedulato)
+      - Pulizia automatica dati vecchi (>90gg)
+      - Log operazioni sistema
+    </export_backup>
+
+    <interfaccia_utente>
+      - Web application responsive
+      - Dark mode / Light mode switch
+      - Interfaccia in italiano
+      - Menu laterale navigazione
+      - Breadcrumb navigazione
+      - Loading states durante operazioni
+      - Notifiche toast per feedback
+      - Tabelle paginabili e ordinabili
+    </interfaccia_utente>
+  </core_features>
+
+  <database_schema>
+    <tables>
+      <switches>
+        - id, hostname, ip_address, device_type (huawei/cisco/extreme)
+        - snmp_community, group_id, location, model, serial_number
+        - is_active, last_seen, last_discovery, created_at
+      </switches>
+
+      <switch_groups>
+        - id, name, description
+        - ssh_username, ssh_password_encrypted, ssh_port
+        - created_at, updated_at
+      </switch_groups>
+
+      <ports>
+        - id, switch_id, port_name, port_index, port_description
+        - port_type (access/trunk/uplink), vlan_id, admin_status, oper_status
+        - speed, is_uplink, last_mac_count, updated_at
+      </ports>
+
+      <mac_addresses>
+        - id, mac_address (unique), vendor_oui, vendor_name
+        - device_type, first_seen, last_seen, is_active
+      </mac_addresses>
+
+      <mac_locations>
+        - id, mac_id, switch_id, port_id, vlan_id
+        - ip_address, hostname, seen_at, is_current
+      </mac_locations>
+
+      <mac_history>
+        - id, mac_id, switch_id, port_id, vlan_id
+        - ip_address, event_type (new/move/disappear), event_at
+        - previous_switch_id, previous_port_id
+      </mac_history>
+
+      <topology_links>
+        - id, local_switch_id, local_port_id
+        - remote_switch_id, remote_port_id
+        - protocol (lldp/cdp), discovered_at, last_seen
+      </topology_links>
+
+      <alerts>
+        - id, alert_type, mac_id, switch_id, port_id
+        - message, severity, is_read, is_notified
+        - created_at, resolved_at
+      </alerts>
+
+      <oui_vendors>
+        - id, oui_prefix (AA:BB:CC), vendor_name
+        - device_type_hint, updated_at
+      </oui_vendors>
+
+      <discovery_logs>
+        - id, switch_id, discovery_type (snmp/cli)
+        - status (success/error), mac_count, error_message
+        - started_at, completed_at, duration_ms
+      </discovery_logs>
+
+      <settings>
+        - id, key, value, description, updated_at
+      </settings>
+    </tables>
+  </database_schema>
+
+  <api_endpoints_summary>
+    <mac_operations>
+      - GET /api/mac/search?q={query} - Ricerca MAC
+      - GET /api/mac/{mac_address} - Dettaglio MAC
+      - GET /api/mac/{mac_address}/history - Storico movimenti
+      - GET /api/mac/export - Export CSV
+    </mac_operations>
+
+    <switch_management>
+      - GET /api/switches - Lista switch
+      - POST /api/switches - Aggiungi switch
+      - GET /api/switches/{id} - Dettaglio switch
+      - PUT /api/switches/{id} - Modifica switch
+      - DELETE /api/switches/{id} - Elimina switch
+      - GET /api/switches/{id}/ports - Porte dello switch
+      - GET /api/switches/{id}/macs - MAC sullo switch
+    </switch_management>
+
+    <switch_groups>
+      - GET /api/groups - Lista gruppi
+      - POST /api/groups - Crea gruppo
+      - PUT /api/groups/{id} - Modifica gruppo
+      - DELETE /api/groups/{id} - Elimina gruppo
+    </switch_groups>
+
+    <discovery>
+      - POST /api/discovery/start - Avvia discovery manuale
+      - GET /api/discovery/status - Stato discovery
+      - POST /api/discovery/seed - Discovery da seed device
+      - GET /api/discovery/logs - Log discovery
+    </discovery>
+
+    <topology>
+      - GET /api/topology - Mappa topologia
+      - GET /api/topology/links - Lista connessioni
+      - POST /api/topology/refresh - Aggiorna topologia
+    </topology>
+
+    <alerts>
+      - GET /api/alerts - Lista alert
+      - GET /api/alerts/unread - Alert non letti
+      - PUT /api/alerts/{id}/read - Marca come letto
+      - PUT /api/alerts/read-all - Marca tutti come letti
+      - GET /api/alerts/config - Configurazione alert
+      - PUT /api/alerts/config - Modifica configurazione
+    </alerts>
+
+    <dashboard>
+      - GET /api/dashboard/stats - Statistiche generali
+      - GET /api/dashboard/trends - Trend temporali
+      - GET /api/dashboard/top-switches - Top switch per MAC
+    </dashboard>
+
+    <settings>
+      - GET /api/settings - Tutte le impostazioni
+      - PUT /api/settings - Aggiorna impostazioni
+      - POST /api/settings/backup - Esegui backup
+      - GET /api/settings/telegram/test - Test notifica Telegram
+    </settings>
+  </api_endpoints_summary>
+
+  <ui_layout>
+    <main_structure>
+      - Sidebar sinistra con menu navigazione
+      - Header con quick search e toggle tema
+      - Area contenuto principale
+      - Footer con stato sistema
+    </main_structure>
+
+    <pages>
+      - Dashboard (home)
+      - Ricerca MAC
+      - Lista Switch
+      - Dettaglio Switch
+      - Gruppi Switch
+      - Mappa Topologia
+      - Alert
+      - Impostazioni
+    </pages>
+
+    <components>
+      - SearchBar globale
+      - MacResultCard
+      - SwitchCard
+      - TopologyMap
+      - AlertBadge
+      - TrendChart
+      - DataTable paginabile
+      - ThemeToggle
+      - LoadingSpinner
+      - Toast notifications
+    </components>
+  </ui_layout>
+
+  <design_system>
+    <color_palette>
+      <light_mode>
+        - Background: white/gray-50
+        - Text: gray-900
+        - Primary: blue-600
+        - Success: green-600
+        - Warning: yellow-600
+        - Error: red-600
+      </light_mode>
+      <dark_mode>
+        - Background: gray-900/gray-800
+        - Text: gray-100
+        - Primary: blue-400
+        - Success: green-400
+        - Warning: yellow-400
+        - Error: red-400
+      </dark_mode>
+    </color_palette>
+    <typography>
+      - Font: Inter o system-ui
+      - Headings: font-semibold
+      - Body: font-normal
+      - Code/MAC: font-mono
+    </typography>
+  </design_system>
+
+  <implementation_steps>
+    <step number="1">
+      <title>Core Backend Setup</title>
+      <tasks>
+        - Setup progetto FastAPI
+        - Configurazione PostgreSQL e SQLAlchemy
+        - Modelli database
+        - Migrazioni Alembic
+        - API base (health check)
+      </tasks>
+    </step>
+
+    <step number="2">
+      <title>Discovery Engine</title>
+      <tasks>
+        - Modulo SNMP per MAC table
+        - Parser Huawei CloudEngine
+        - Parser Cisco
+        - Modulo SSH fallback con netmiko
+        - Scheduler APScheduler
+        - LLDP/CDP discovery
+      </tasks>
+    </step>
+
+    <step number="3">
+      <title>API Layer Completo</title>
+      <tasks>
+        - Endpoint MAC search
+        - Endpoint switch CRUD
+        - Endpoint gruppi
+        - Endpoint discovery
+        - Endpoint alert
+        - Endpoint dashboard stats
+      </tasks>
+    </step>
+
+    <step number="4">
+      <title>Frontend Base</title>
+      <tasks>
+        - Setup React + Vite + TypeScript
+        - Configurazione TailwindCSS
+        - Layout base (sidebar, header)
+        - Routing pagine
+        - Dark/Light mode
+        - Componenti base (DataTable, Cards)
+      </tasks>
+    </step>
+
+    <step number="5">
+      <title>UI Features</title>
+      <tasks>
+        - Dashboard con statistiche
+        - Pagina ricerca MAC
+        - Pagina lista switch
+        - Pagina dettaglio switch
+        - Gestione gruppi
+        - Pagina alert
+      </tasks>
+    </step>
+
+    <step number="6">
+      <title>Topology e Intelligence</title>
+      <tasks>
+        - Mappa topologia interattiva
+        - Database OUI locale
+        - Vendor lookup con fallback API
+        - Device type detection
+      </tasks>
+    </step>
+
+    <step number="7">
+      <title>Alerting e Notifiche</title>
+      <tasks>
+        - Sistema alert backend
+        - Regole alert configurabili
+        - Integrazione Telegram
+        - UI notifiche e badge
+      </tasks>
+    </step>
+
+    <step number="8">
+      <title>Export, Backup e Polish</title>
+      <tasks>
+        - Export CSV
+        - Backup automatico database
+        - Pulizia dati automatica
+        - Grafici trend
+        - Ottimizzazione performance
+        - Testing e bug fix
+      </tasks>
+    </step>
+  </implementation_steps>
+
+  <success_criteria>
+    <functionality>
+      - Certezza 100% nel trovare endpoint fisico del MAC
+      - Distinguere porta utente da uplink/trunk
+      - Tracciare percorso completo: MAC -> switch core -> distribution -> access -> porta endpoint
+      - Tempo ricerca inferiore a 2 secondi
+      - Discovery affidabile di 1200+ dispositivi
+    </functionality>
+    <user_experience>
+      - Ricerca intuitiva e veloce
+      - Informazioni chiare e complete nei risultati
+      - Mappa topologia navigabile
+      - Alert utili e non invasivi
+    </user_experience>
+    <technical_quality>
+      - Nessun crash o errore non gestito
+      - Log dettagliati per troubleshooting
+      - Backup automatico funzionante
+      - API documentata
+    </technical_quality>
+    <design_polish>
+      - UI coerente e professionale
+      - Dark/Light mode funzionanti
+      - Responsive su tablet
+      - Feedback visivo per tutte le azioni
+    </design_polish>
+  </success_criteria>
+</project_specification>
