@@ -294,14 +294,17 @@ class SNMPDiscoveryService:
                         huawei_success = True
 
                         # Parse Huawei FDB MAC table entry
-                        # OID format: base.MAC[6].VLAN.type.flags = ifIndex
-                        # Example: 1.3.6.1.4.1.2011.5.25.42.2.1.3.1.4.0.230.14.101.89.0.1001.1.48 = 104
+                        # OID format varies by model:
+                        #   S6730: base.MAC[6].VLAN.type.flags = ifIndex (9 parts after base)
+                        #   S5735: base.MAC[6].VLAN.type = ifIndex        (8 parts after base)
+                        # Example S6730: ...42.2.1.3.1.4.0.230.14.101.89.0.1001.1.48 = 104
+                        # Example S5735: ...42.2.1.3.1.4.228.48.34.123.137.51.71.0 = 4
                         parts = oid_str.split(".")
-                        base_len = len(huawei_fdb_oid.split("."))  # 14 parts for the base OID
+                        base_len = len(huawei_fdb_oid.split("."))  # 15 parts for the base OID
 
-                        # After base, we have: MAC[6].VLAN.type.flags
-                        # Total parts needed: base_len + 6 (MAC) + 1 (VLAN) + 1 (type) + 1 (flags) = base_len + 9
-                        if len(parts) < base_len + 9:
+                        # Minimum parts: base + MAC[6] + VLAN + type = base_len + 8
+                        # flags field is optional (present on S6730, absent on S5735)
+                        if len(parts) < base_len + 8:
                             logger.debug(f"OID too short: {oid_str}")
                             continue
 
