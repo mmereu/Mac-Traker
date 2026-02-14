@@ -737,11 +737,21 @@ class SNMPDiscoveryService:
             port_index = entry.get("port_index", 0)
             vlan_id = entry.get("vlan_id", 1)
 
-            # Get or create port
+            # Get or create port (by name first, then by ifIndex for cross-name matching)
             port = self.db.query(Port).filter(
                 Port.switch_id == switch.id,
                 Port.port_name == port_name
             ).first()
+
+            if not port and port_index and port_index > 0:
+                # Fallback: find by ifIndex (handles name mismatches from old records)
+                port = self.db.query(Port).filter(
+                    Port.switch_id == switch.id,
+                    Port.port_index == port_index
+                ).first()
+                if port and port.port_name != port_name:
+                    logger.info(f"Port ifIndex {port_index}: updating name '{port.port_name}' -> '{port_name}'")
+                    port.port_name = port_name
 
             # Detect uplink ports based on:
             # 1. Port name patterns (Eth-Trunk, Port-channel, etc.)
@@ -777,6 +787,11 @@ class SNMPDiscoveryService:
                     self.db.rollback()
                     continue  # Skip this MAC entry
             else:
+                # Always update port_index (ifIndex) if we have a valid one
+                # This ensures LLDP can match ports by ifIndex even for old records
+                if port_index and port_index > 0 and port.port_index != port_index:
+                    port.port_index = port_index
+
                 # Existing port - respect LLDP-based classification if available
                 if port.lldp_neighbor_type:
                     # LLDP has already classified this port
@@ -800,6 +815,12 @@ class SNMPDiscoveryService:
                     # No LLDP info but name suggests trunk
                     port.is_uplink = True
                     port.port_type = "trunk"
+                elif not is_uplink_by_name and port.is_uplink:
+                    # Port marked as uplink but has NO LLDP evidence and NO trunk name pattern.
+                    # Reset stale uplink flag - it was likely set incorrectly.
+                    port.is_uplink = False
+                    port.port_type = "access"
+                    logger.debug(f"Port {port_name} reset from uplink to access (no LLDP neighbor, no trunk name)")
 
             # Get or create MAC address
             mac = self.db.query(MacAddress).filter(
