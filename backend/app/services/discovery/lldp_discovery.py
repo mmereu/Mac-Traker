@@ -122,6 +122,133 @@ class LLDPDiscoveryService:
     def __init__(self, db: Session):
         self.db = db
 
+    def _find_local_port(self, switch_id: int, port_index: int,
+                          fallback_name: str = None) -> Optional[Port]:
+        """Find a local port by ifIndex (port_index) first, then by name as fallback.
+
+        LLDP provides lldpRemLocalPortNum which equals the ifIndex of the local port.
+        SNMP MAC discovery creates ports with real ifDescr names and stores the same
+        ifIndex as port_index. Using ifIndex for lookup ensures LLDP correctly matches
+        ports regardless of name format differences (GE vs XGE, slot differences, etc.).
+        """
+        # Primary: lookup by port_index (ifIndex) - most reliable for cross-MIB matching
+        if port_index and port_index > 0:
+            port = self.db.query(Port).filter(
+                Port.switch_id == switch_id,
+                Port.port_index == port_index
+            ).first()
+            if port:
+                return port
+
+        # Fallback: lookup by normalized name
+        if fallback_name:
+            normalized = normalize_port_name(fallback_name)
+            port = self.db.query(Port).filter(
+                Port.switch_id == switch_id,
+                Port.port_name == normalized
+            ).first()
+            if port:
+                return port
+
+        return None
+
+    def _cleanup_duplicate_ports(self):
+        """Clean up duplicate port records with same ifIndex on the same switch.
+
+        Previous LLDP bug created ports with wrong names (e.g., GE0/0/4) while
+        SNMP discovery created the correct port (e.g., GE1/0/4) with the same ifIndex.
+        This merges duplicates by moving all references to the port with MAC locations.
+        """
+        from sqlalchemy import func
+        from app.db.models import MacLocation, MacHistory
+
+        # Find (switch_id, port_index) pairs that have >1 port record
+        duplicates = self.db.query(
+            Port.switch_id, Port.port_index, func.count(Port.id).label('cnt')
+        ).filter(
+            Port.port_index.isnot(None),
+            Port.port_index > 0
+        ).group_by(
+            Port.switch_id, Port.port_index
+        ).having(
+            func.count(Port.id) > 1
+        ).all()
+
+        if not duplicates:
+            return 0
+
+        merged_count = 0
+        for switch_id, port_index, cnt in duplicates:
+            ports = self.db.query(Port).filter(
+                Port.switch_id == switch_id,
+                Port.port_index == port_index
+            ).all()
+
+            # Decide which port to KEEP:
+            # 1. Prefer port with MacLocation references (it's the one SNMP uses)
+            # 2. Then prefer port with LLDP neighbor info
+            # 3. Then prefer the one with the longer/more specific name
+            keep = ports[0]
+            for p in ports[1:]:
+                keep_locs = self.db.query(MacLocation).filter(
+                    MacLocation.port_id == keep.id
+                ).count()
+                p_locs = self.db.query(MacLocation).filter(
+                    MacLocation.port_id == p.id
+                ).count()
+
+                if p_locs > keep_locs:
+                    keep = p
+                elif p_locs == keep_locs and p.lldp_neighbor_name and not keep.lldp_neighbor_name:
+                    keep = p
+
+            # Merge all other ports into keep
+            for p in ports:
+                if p.id == keep.id:
+                    continue
+
+                # Transfer LLDP info if keep doesn't have it
+                if p.lldp_neighbor_name and not keep.lldp_neighbor_name:
+                    keep.lldp_neighbor_name = p.lldp_neighbor_name
+                    keep.lldp_neighbor_type = p.lldp_neighbor_type
+                    keep.is_uplink = p.is_uplink
+                    keep.port_type = p.port_type
+
+                # Move MacLocation references
+                self.db.query(MacLocation).filter(
+                    MacLocation.port_id == p.id
+                ).update({MacLocation.port_id: keep.id})
+
+                # Move MacHistory references (port_id and previous_port_id)
+                self.db.query(MacHistory).filter(
+                    MacHistory.port_id == p.id
+                ).update({MacHistory.port_id: keep.id})
+                self.db.query(MacHistory).filter(
+                    MacHistory.previous_port_id == p.id
+                ).update({MacHistory.previous_port_id: keep.id})
+
+                # Move TopologyLink references
+                self.db.query(TopologyLink).filter(
+                    TopologyLink.local_port_id == p.id
+                ).update({TopologyLink.local_port_id: keep.id})
+                self.db.query(TopologyLink).filter(
+                    TopologyLink.remote_port_id == p.id
+                ).update({TopologyLink.remote_port_id: keep.id})
+
+                logger.info(
+                    f"Merging duplicate port '{p.port_name}' (id={p.id}) "
+                    f"into '{keep.port_name}' (id={keep.id}), "
+                    f"switch_id={switch_id}, ifIndex={port_index}"
+                )
+                self.db.delete(p)
+                merged_count += 1
+
+        if merged_count > 0:
+            self.db.flush()
+            logger.info(f"Cleaned up {merged_count} duplicate port records")
+
+        return merged_count
+
     async def discover_neighbors(self, switch: Switch) -> List[LLDPNeighbor]:
         """
         Discover LLDP neighbors for a switch.
@@ -329,9 +456,15 @@ class LLDPDiscoveryService:
             result["message"] = "Almeno 2 switch necessari per creare topologia"
             return result
 
-        # Clear existing links before refresh (optional - could update instead)
-        # self.db.query(TopologyLink).delete()
-        # self.db.commit()
+        # Clean up duplicate port records from previous LLDP runs
+        # (same ifIndex, different names due to LLDP vs SNMP naming mismatch)
+        try:
+            merged = self._cleanup_duplicate_ports()
+            if merged > 0:
+                self.db.commit()
+        except Exception as e:
+            logger.warning(f"Duplicate port cleanup failed: {e}")
+            self.db.rollback()
 
         # Track discovered links to avoid duplicates
         discovered_links = set()
@@ -386,11 +519,10 @@ class LLDPDiscoveryService:
                                 nr_is_uplink = True
                                 nr_port_type = "uplink"
 
-                        # Update local port with LLDP data
-                        local_port = self.db.query(Port).filter(
-                            Port.switch_id == switch.id,
-                            Port.port_name == neighbor.local_port_name
-                        ).first()
+                        # Update local port with LLDP data (lookup by ifIndex first)
+                        local_port = self._find_local_port(
+                            switch.id, neighbor.local_port_index, neighbor.local_port_name
+                        )
                         if local_port:
                             local_port.lldp_neighbor_name = neighbor.remote_system_name
                             local_port.lldp_neighbor_type = nr_type
@@ -433,16 +565,15 @@ class LLDPDiscoveryService:
                         is_uplink = True
                         lldp_neighbor_type = "unknown"
 
-                    # Get or create local port
-                    local_port = self.db.query(Port).filter(
-                        Port.switch_id == switch.id,
-                        Port.port_name == neighbor.local_port_name
-                    ).first()
+                    # Get or create local port (lookup by ifIndex first, then name)
+                    local_port = self._find_local_port(
+                        switch.id, neighbor.local_port_index, neighbor.local_port_name
+                    )
 
                     if not local_port:
                         local_port = Port(
                             switch_id=switch.id,
-                            port_name=neighbor.local_port_name,
+                            port_name=normalize_port_name(neighbor.local_port_name),
                             port_index=neighbor.local_port_index,
                             port_type=port_type,
                             is_uplink=is_uplink,
